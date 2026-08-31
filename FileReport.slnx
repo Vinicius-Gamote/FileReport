@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FileReport.Domain/FileReport.Domain.csproj" />
+    <Project Path="src/FileReport.Application/FileReport.Application.csproj" />
+    <Project Path="src/FileReport.Contracts/FileReport.Contracts.csproj" />
+    <Project Path="src/FileReport.Infrastructure/FileReport.Infrastructure.csproj" />
+    <Project Path="src/FileReport.Api/FileReport.Api.csproj" />
+    <Project Path="src/FileReport.Worker/FileReport.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FileReport.Domain.Tests/FileReport.Domain.Tests.csproj" />
+    <Project Path="tests/FileReport.Application.Tests/FileReport.Application.Tests.csproj" />
+    <Project Path="tests/FileReport.IntegrationTests/FileReport.IntegrationTests.csproj" />
+    <Project Path="tests/FileReport.ArchitectureTests/FileReport.ArchitectureTests.csproj" />
+  </Folder>
+</Solution>

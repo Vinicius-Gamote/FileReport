@@ -1,0 +1,440 @@
+<header class="topbar">
+  <a class="brand" href="/" aria-label="FileReport home"
+    ><span class="mark">F<span>R</span></span> FileReport</a
+  >
+  <span class="tag">CSV COMPARISON WORKSPACE</span>
+  @if (session.identity(); as identity) {
+    <div class="account">
+      <span>{{ identity.email }}</span
+      ><button mat-button (click)="session.logout()">Sign out</button>
+    </div>
+  }
+</header>
+<main>
+  @if (!session.identity()) {
+    <section class="welcome">
+      <div>
+        <p class="eyebrow">UNDERSTAND WHAT CHANGED</p>
+        <h1>Two files.<br />One clear comparison.</h1>
+        <p class="lede">
+          Compare CSV records by key, inspect differences, and follow every processing attempt.
+        </p>
+        <div class="principles">
+          <span>Private file storage</span><span>Asynchronous processing</span
+          ><span>Measured results</span>
+        </div>
+        <p class="muted">
+          Volume, memory, elapsed time, failures, and cost availability are reported per workload.
+          No capacity or speed is promised before measurement.
+        </p>
+      </div>
+      <mat-card class="auth-card"
+        ><p class="eyebrow">YOUR WORKSPACE</p>
+        <h2>{{ mode === 'login' ? 'Welcome back' : 'Create your account' }}</h2>
+        <form #authForm="ngForm" (ngSubmit)="authenticate()">
+          <mat-form-field appearance="outline"
+            ><mat-label>Email address</mat-label
+            ><input
+              matInput
+              type="email"
+              name="email"
+              [(ngModel)]="email"
+              required
+              email
+              autocomplete="email"
+          /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>Password</mat-label
+            ><input
+              matInput
+              type="password"
+              name="password"
+              [(ngModel)]="password"
+              required
+              [minlength]="mode === 'register' ? 12 : 1"
+              maxlength="128"
+              [autocomplete]="mode === 'register' ? 'new-password' : 'current-password'"
+          /></mat-form-field>
+          @if (mode === 'register') {
+            <p class="muted">
+              Use 12–128 characters, uppercase, lowercase, and a number. No email confirmation is
+              required.
+            </p>
+          }
+          <button mat-flat-button type="submit" [disabled]="busy() || authForm.invalid">
+            {{ busy() ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account' }}
+          </button>
+        </form>
+        <button mat-button (click)="mode = mode === 'login' ? 'register' : 'login'">
+          {{ mode === 'login' ? 'Create an account' : 'Already have an account? Sign in' }}
+        </button>
+        <p class="muted">
+          Your access token stays in memory. Reloading or session expiry requires sign-in.
+        </p>
+      </mat-card>
+    </section>
+  } @else {
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">WORKSPACE</p>
+        <h1>Compare with confidence.</h1>
+        <p class="lede">
+          Upload a Baseline and a Candidate. Choose the keys that identify each record.
+        </p>
+      </div>
+      <button mat-stroked-button (click)="newComparison()" [disabled]="busy()">
+        New comparison
+      </button>
+    </div>
+    <div class="connection" aria-live="polite">
+      <span class="dot"></span>{{ workspace.connection() }}
+      <span>· HTTP snapshots reconcile missed events</span>
+    </div>
+    <div class="workspace-grid">
+      <div class="main-column">
+        @if (isEditable()) {
+          <mat-card class="panel"
+            ><div class="panel-title">
+              <span class="step">01</span>
+              <div>
+                <h2>Choose your files</h2>
+                <p>UTF-8 CSV with a header. File contents stay out of browser memory.</p>
+              </div>
+            </div>
+            <div class="file-grid">
+              <label class="file-input"
+                ><span class="file-badge">A</span><strong>Baseline</strong
+                ><span>Original dataset</span
+                ><input
+                  aria-label="Baseline CSV"
+                  type="file"
+                  accept=".csv,text/csv"
+                  (change)="selected($event, 'baseline')"
+                  [disabled]="busy()"
+              /></label>
+              <label class="file-input"
+                ><span class="file-badge candidate">B</span><strong>Candidate</strong
+                ><span>Dataset to compare</span
+                ><input
+                  aria-label="Candidate CSV"
+                  type="file"
+                  accept=".csv,text/csv"
+                  (change)="selected($event, 'candidate')"
+                  [disabled]="busy()"
+              /></label>
+            </div>
+            @for (file of workspace.job()?.files ?? []; track file.id) {
+              <div class="file-detail">
+                <strong>{{ file.side }}</strong
+                ><span>{{ file.name }}</span
+                ><span>{{ format(file.bytes) }} bytes stored</span>
+              </div>
+            }
+            @if (busy() && workspace.transfer() > 0) {
+              <p>
+                Browser transfer: {{ workspace.transfer() }}% — server commit and comparison are
+                separate steps.
+              </p>
+              <mat-progress-bar mode="determinate" [value]="workspace.transfer()" />
+            }
+            <p class="muted">
+              Server committed: {{ format(workspace.job()?.serverReceivedBytes ?? '0') }} bytes.
+              Transfer completion does not mean comparison completion.
+            </p>
+          </mat-card>
+          <mat-card class="panel"
+            ><div class="panel-title">
+              <span class="step">02</span>
+              <div>
+                <h2>Define the comparison</h2>
+                <p>Keys must be unique and nonempty in each file. Values are compared exactly.</p>
+              </div>
+            </div>
+            <div class="file-grid">
+              <mat-form-field appearance="outline"
+                ><mat-label>Baseline delimiter</mat-label
+                ><mat-select
+                  [(ngModel)]="baselineDelimiter"
+                  [disabled]="busy()"
+                  (selectionChange)="run(preview.bind(this))"
+                >
+                  @for (d of delimiters; track d.value) {
+                    <mat-option [value]="d.value">{{ d.label }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              >
+              <mat-form-field appearance="outline"
+                ><mat-label>Candidate delimiter</mat-label
+                ><mat-select
+                  [(ngModel)]="candidateDelimiter"
+                  [disabled]="busy()"
+                  (selectionChange)="run(preview.bind(this))"
+                >
+                  @for (d of delimiters; track d.value) {
+                    <mat-option [value]="d.value">{{ d.label }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              >
+            </div>
+            <mat-form-field appearance="outline"
+              ><mat-label>Key columns</mat-label
+              ><mat-select multiple [(ngModel)]="keys" [disabled]="busy() || !headers().length">
+                @for (h of headers(); track h) {
+                  <mat-option [value]="h">{{ h }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+            <label class="check"
+              ><input type="checkbox" [(ngModel)]="allColumns" [disabled]="busy()" />Compare all
+              non-key columns</label
+            >
+            @if (!allColumns) {
+              <mat-form-field appearance="outline"
+                ><mat-label>Compared columns</mat-label
+                ><mat-select multiple [(ngModel)]="columns">
+                  @for (h of headers(); track h) {
+                    @if (!keys.includes(h)) {
+                      <mat-option [value]="h">{{ h }}</mat-option>
+                    }
+                  }
+                </mat-select></mat-form-field
+              >
+            }
+            <button
+              mat-flat-button
+              (click)="submit()"
+              [disabled]="busy() || !keys.length || workspace.job()?.files?.length !== 2"
+            >
+              Start comparison
+            </button>
+          </mat-card>
+        }
+        @if (workspace.job(); as job) {
+          <mat-card class="panel"
+            ><div class="panel-title">
+              <span class="step">03</span>
+              <div>
+                <h2>Comparison overview</h2>
+                <p class="job-id">{{ job.id }}</p>
+              </div>
+              <span class="status" [class.failure]="job.state === 'Failed'">{{ job.state }}</span>
+            </div>
+            <p aria-live="polite">{{ job.stage }}</p>
+            @if (
+              ['PendingDispatch', 'Queued', 'Processing', 'RetryScheduled'].includes(job.state)
+            ) {
+              <mat-progress-bar mode="indeterminate" />
+            }
+            @if (job.failureCode) {
+              <p class="error">
+                Processing failed: {{ job.failureCode }}. No complete comparison is published.
+                Remaining record totals may be unknown.
+              </p>
+            }
+            @if (report(); as result) {
+              <div class="result-grid">
+                <app-comparison-chart [counts]="result.counts" />
+                <table class="counts">
+                  <caption>
+                    Exact record counts
+                  </caption>
+                  <tbody>
+                    <tr>
+                      <th>Added</th>
+                      <td>{{ format(result.counts.added) }}</td>
+                    </tr>
+                    <tr>
+                      <th>Removed</th>
+                      <td>{{ format(result.counts.removed) }}</td>
+                    </tr>
+                    <tr>
+                      <th>Changed</th>
+                      <td>{{ format(result.counts.changed) }}</td>
+                    </tr>
+                    <tr>
+                      <th>Unchanged</th>
+                      <td>{{ format(result.counts.unchanged) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Baseline: {{ format(result.baselineRecords) }} records · Candidate:
+                {{ format(result.candidateRecords) }} records. Headers excluded.
+              </p>
+              <div class="actions">
+                <button mat-stroked-button (click)="download()" [disabled]="busy()">
+                  Download differences</button
+                ><button mat-flat-button (click)="sendEmail()" [disabled]="busy() || !!delivery()">
+                  Send by email
+                </button>
+              </div>
+              <p class="muted">
+                Recipient: {{ session.identity()?.email }}. Summary and authenticated link only.
+                {{ job.emailMode === 'Fake' ? 'Local fake provider: no real email is sent.' : '' }}
+              </p>
+              @if (delivery(); as d) {
+                <p aria-live="polite">
+                  Email: {{ d.state }} {{ d.errorCode ?? '' }}. Accepted means provider acceptance,
+                  not inbox delivery.
+                </p>
+              }
+              <p class="muted">
+                Artifact retention ends {{ result.artifact.expiresAtUtc | date: 'medium' }}.
+              </p>
+            } @else if (job.state !== 'Failed') {
+              <p class="muted">A report appears after validation and durable result publication.</p>
+            }
+          </mat-card>
+          <mat-card class="panel"
+            ><h2>Measurements &amp; execution</h2>
+            <p class="muted">{{ job.measurements.availability }}</p>
+            <div class="metrics">
+              <div>
+                <span>Unique input</span
+                ><strong>{{ format(job.measurements.uniqueInputBytes) }}</strong
+                ><small>bytes, counted once</small>
+              </div>
+              <div>
+                <span>Submitted total</span
+                ><strong>{{ seconds(job.measurements.submittedTotalSeconds) }}</strong
+                ><small>includes queue and retries</small>
+              </div>
+              <div>
+                <span>Upload interval</span
+                ><strong>{{ seconds(job.measurements.uploadSeconds) }}</strong
+                ><small>includes gaps between uploads</small>
+              </div>
+              <div>
+                <span>Estimated cost</span><strong>{{ job.measurements.cost.status }}</strong
+                ><small>not a provider bill</small>
+              </div>
+            </div>
+            <p class="muted">{{ job.measurements.cost.reason }}</p>
+            <p class="muted">{{ job.measurements.clockNote }}</p>
+            <p>
+              Full workflow: {{ seconds(job.measurements.fullWorkflowSeconds) }}.
+              {{ job.measurements.memoryScope }}
+            </p>
+            @for (m of job.measurements.attempts; track m.attempt) {
+              <details>
+                <summary>Attempt {{ m.attempt }} measurements</summary>
+                <dl>
+                  <dt>Elapsed / CPU time</dt>
+                  <dd>{{ seconds(m.elapsedSeconds) }} / {{ seconds(m.cpuSeconds) }}</dd>
+                  <dt>Observed worker working set peak</dt>
+                  <dd>{{ format(m.observedPeakWorkingSetBytes) }} bytes</dd>
+                  <dt>Observed managed heap peak</dt>
+                  <dd>{{ format(m.observedPeakManagedHeapBytes) }} bytes</dd>
+                  <dt>Allocated bytes (not live memory)</dt>
+                  <dd>{{ format(m.allocatedBytes) }}</dd>
+                  <dt>Physical reads / writes</dt>
+                  <dd>
+                    {{ format(m.physicalReadBytes) }} / {{ format(m.physicalWrittenBytes) }} bytes
+                  </dd>
+                  <dt>Scratch high-water</dt>
+                  <dd>{{ format(m.scratchPeakBytes) }} bytes</dd>
+                  <dt>Sampling</dt>
+                  <dd>
+                    {{ m.samples }} observations; {{ m.sampleIntervalMilliseconds }} ms interval.
+                    Peaks between samples can be missed.
+                  </dd>
+                </dl>
+              </details>
+            }
+            @for (attempt of job.attempts; track attempt.number) {
+              <p>
+                Attempt {{ attempt.number }} · {{ attempt.startedAtUtc | date: 'medium' }} ·
+                {{ attempt.failureCode ?? (attempt.finishedAtUtc ? 'Completed' : 'Running') }}
+              </p>
+            }
+          </mat-card>
+        }
+        @if (samples(); as page) {
+          <mat-card class="panel"
+            ><h2>Difference samples</h2>
+            <p>
+              Retained {{ page.retainedCount }} samples.
+              {{
+                page.samplesTruncated
+                  ? 'Sample limits reached; download the artifact for all differences.'
+                  : 'All differences fit within the sample limit.'
+              }}
+            </p>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Classification</th>
+                    <th>Key</th>
+                    <th>Baseline values</th>
+                    <th>Candidate values</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of page.items; track $index) {
+                    <tr>
+                      <td>{{ row.kind }}</td>
+                      <td>
+                        <pre>{{ row.key | json }}</pre>
+                      </td>
+                      <td>
+                        <pre>{{ row.baseline | json }}</pre>
+                      </td>
+                      <td>
+                        <pre>{{ row.candidate | json }}</pre>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (page.nextOffset !== null) {
+              <button mat-button (click)="nextSamples()">Next samples</button>
+            }
+          </mat-card>
+        }
+      </div>
+      <aside>
+        <mat-card class="panel history"
+          ><div class="panel-title">
+            <h2>Recent comparisons</h2>
+            <button mat-button (click)="run(loadHistory.bind(this))" [disabled]="busy()">
+              Refresh
+            </button>
+          </div>
+          @for (item of history().items; track item.id) {
+            <button class="history-item" (click)="open(item.id)" [disabled]="busy()">
+              <span>{{ item.createdAtUtc | date: 'MMM d, HH:mm' }}</span
+              ><strong>{{ item.state }}</strong
+              ><small>{{ item.id.slice(0, 8) }}</small>
+            </button>
+          } @empty {
+            <p class="muted">No comparisons yet. Your first report starts with two files.</p>
+          }
+          @if (history().nextCursor; as cursor) {
+            <button mat-button (click)="run(loadHistory.bind(this, cursor))">
+              Older comparisons
+            </button>
+          }
+        </mat-card>
+        <div class="note">
+          <h3>Evidence over assumptions.</h3>
+          <p>
+            Differences are results, not failures. Invalid CSV data stops processing. Unknown
+            metrics remain unavailable.
+          </p>
+          <p>Matching uses your selected keys, independent of row order.</p>
+        </div>
+      </aside>
+    </div>
+  }
+  @if (error()) {
+    <div class="error-toast" role="alert">
+      <strong>Action needed</strong>
+      <p>{{ error() }}</p>
+      <button mat-button (click)="error.set('')">Dismiss</button>
+    </div>
+  }
+</main>
+<footer>FileReport · Private comparisons, transparent measurements.</footer>

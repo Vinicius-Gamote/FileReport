@@ -1,0 +1,118 @@
+name: filereport
+x-application-environment: &application-environment
+  ConnectionStrings__Database: Host=postgres;Database=filereport;Username=filereport;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+  RabbitMq__Host: rabbitmq
+  RabbitMq__User: filereport
+  RabbitMq__Password: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+  Storage__Root: /data
+  Jwt__Issuer: FileReport
+  Jwt__Audience: FileReport.Web
+  Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY}
+  Email__Mode: ${EMAIL_MODE:-Fake}
+  Email__ApiKey: ${RESEND_API_KEY:-}
+  Email__From: ${EMAIL_FROM:-FileReport <reports@example.test>}
+  Email__ReportBaseUrl: ${REPORT_BASE_URL:-http://localhost:8080}
+  Cors__Origin: ${WEB_ORIGIN:-http://localhost:8080}
+services:
+  postgres:
+    image: postgres:18.6-bookworm@sha256:1c59e2c3c818eaa0f0628f695b36e7c9e362d6b219b36a54a32df645cbd7e1af
+    environment:
+      POSTGRES_DB: filereport
+      POSTGRES_USER: filereport
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or the environment}
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U filereport -d filereport"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+  rabbitmq:
+    image: rabbitmq:4.3.5-management@sha256:45226f38499559b9f56875c752cc6689ff90e8f20796fe80fd9bc28d64723031
+    environment:
+      RABBITMQ_DEFAULT_USER: filereport
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env or the environment}
+    ports: ["127.0.0.1:55672:5672", "127.0.0.1:55673:15672"]
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    mem_limit: 768m
+  storage-init:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0.11@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94
+    user: "0"
+    command: ["/bin/sh", "-c", "mkdir -p /data/objects /data/temporary /data/scratch && chown -R 1654:1654 /data"]
+    volumes: ["files:/data"]
+    restart: "no"
+  migrate:
+    build:
+      context: .
+      dockerfile: src/FileReport.Api/Dockerfile
+    image: filereport-api:local
+    command: ["--migrate"]
+    environment: *application-environment
+    depends_on:
+      postgres: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+    volumes: ["files:/data"]
+    restart: "no"
+  api:
+    build:
+      context: .
+      dockerfile: src/FileReport.Api/Dockerfile
+    image: filereport-api:local
+    environment: *application-environment
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    volumes: ["files:/data"]
+    ports: ["127.0.0.1:5080:8080"]
+    mem_limit: 512m
+    cpus: 1
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    restart: unless-stopped
+  worker:
+    build:
+      context: .
+      dockerfile: src/FileReport.Worker/Dockerfile
+    image: filereport-worker:local
+    environment: *application-environment
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
+    volumes: ["files:/data"]
+    mem_limit: 1g
+    cpus: 2
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    stop_grace_period: 30s
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: web/filereport-ui/Dockerfile
+    image: filereport-web:local
+    depends_on: [api]
+    ports: ["127.0.0.1:8080:8080"]
+    mem_limit: 128m
+    cpus: 0.5
+    read_only: true
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health/nginx"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  files:
+  postgres-data:
+  rabbit-data:

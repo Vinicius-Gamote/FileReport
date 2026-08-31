@@ -1,0 +1,40 @@
+@use '@angular/material' as mat;
+html {
+  @include mat.theme(
+    (
+      color: (
+        theme-type: light,
+        primary: mat.$cyan-palette,
+      ),
+      typography: (
+        plain-family: system-ui,
+        brand-family: system-ui,
+      ),
+      density: 0,
+    )
+  );
+  scroll-behavior: smooth;
+  background: #f8f9f3;
+}
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid #326a54;
+  outline-offset: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

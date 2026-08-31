@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <UserSecretsId>FileReport-Local-23cfe472-4dbf-48b5-bfdc-ed37b13398e6</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../FileReport.Application/FileReport.Application.csproj" />
+    <ProjectReference Include="../FileReport.Infrastructure/FileReport.Infrastructure.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <Content Include="../../config/processing.defaults.json" Link="processing.defaults.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

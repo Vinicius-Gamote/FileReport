@@ -1,0 +1,97 @@
+name: Validate FileReport
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      COMPOSE_PROJECT_NAME: filereport-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      TEST_RESULTS_DIRECTORY: ${{ runner.temp }}/filereport-tests
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_ENVIRONMENT: Production
+      NG_CLI_ANALYTICS: "false"
+      RabbitMq__Host: 127.0.0.1
+      RabbitMq__Port: "55672"
+      RabbitMq__User: filereport
+      Jwt__Issuer: FileReport
+      Jwt__Audience: FileReport.Web
+      Storage__Root: ${{ runner.temp }}/filereport-infrastructure-storage
+      Email__Mode: Fake
+      Email__From: FileReport <reports@example.test>
+      Email__ReportBaseUrl: http://localhost:8080
+      Cors__Origin: http://localhost:8080
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 10.0.400
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.18.0
+      - name: Locked backend restore
+        run: dotnet restore FileReport.slnx --locked-mode
+      - name: Locked frontend install
+        run: npm ci --prefix web/filereport-ui
+      - name: Build backend
+        run: dotnet build FileReport.slnx --no-restore --configuration Release
+      - name: Backend formatting
+        run: dotnet format whitespace FileReport.slnx --no-restore --verify-no-changes
+      - name: Backend tests
+        run: dotnet test FileReport.slnx --no-build --no-restore --configuration Release --logger trx --results-directory "$TEST_RESULTS_DIRECTORY"
+      - name: Frontend formatting
+        run: npm --prefix web/filereport-ui run format:check
+      - name: Build frontend
+        run: npm --prefix web/filereport-ui run build
+      - name: Frontend tests
+        run: npm --prefix web/filereport-ui test
+      - name: Generate isolated credentials
+        shell: bash
+        run: |
+          database_secret=$(openssl rand -hex 32)
+          broker_secret=$(openssl rand -hex 32)
+          signing_key=$(openssl rand -hex 32)
+          echo "::add-mask::$database_secret"
+          echo "::add-mask::$broker_secret"
+          echo "::add-mask::$signing_key"
+          {
+            echo "POSTGRES_PASSWORD=$database_secret"
+            echo "RABBITMQ_PASSWORD=$broker_secret"
+            echo "JWT_SIGNING_KEY=$signing_key"
+            echo "ConnectionStrings__Database=Host=127.0.0.1;Port=55432;Database=filereport_tests;Username=filereport;Password=$database_secret"
+            echo "RabbitMq__Password=$broker_secret"
+            echo "Jwt__SigningKey=$signing_key"
+          } >> "$GITHUB_ENV"
+      - name: Start database and broker
+        run: docker compose up -d --wait postgres rabbitmq
+      - name: Create isolated infrastructure test database
+        run: docker compose exec -T postgres createdb -U filereport filereport_tests
+      - name: Apply test database migrations
+        run: dotnet run --project src/FileReport.Api --configuration Release --no-build -- --migrate
+      - name: Real infrastructure tests
+        env:
+          RUN_INFRASTRUCTURE_TESTS: "1"
+        run: dotnet test tests/FileReport.IntegrationTests --no-build --no-restore --configuration Release --filter FullyQualifiedName~InfrastructureTests --logger trx --results-directory "$TEST_RESULTS_DIRECTORY"
+      - name: Build images and start application topology
+        run: docker compose up -d --build --wait
+      - name: End-to-end API smoke with fake email
+        env:
+          FILEREPORT_SMOKE_BASE_URL: http://127.0.0.1:5080
+        run: dotnet test tests/FileReport.IntegrationTests --no-build --no-restore --configuration Release --filter FullyQualifiedName~DeployedApiTests --logger trx --results-directory "$TEST_RESULTS_DIRECTORY"
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: validation-evidence
+          path: ${{ runner.temp }}/filereport-tests/**/*.trx
+          retention-days: 14
+      - name: Stop isolated services
+        if: always()
+        run: docker compose down --volumes
