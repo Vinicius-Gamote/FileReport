@@ -5,9 +5,6 @@
 **/.angular/
 .cache/
 .local/
-**/TestResults/
-coverage/
-playwright-report/
 *.user
 .env
 .env.*

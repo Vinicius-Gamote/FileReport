@@ -4,7 +4,7 @@ Status: T01–T03 completed; implementation now spans the comparison pipeline. U
 Inputs: [Requirements](requirements.md) and [System design](design.md).  
 Language: Implement the entire application and its documentation in English.
 
-Current capabilities, local commands, and validation limitations: [README](../README.md). Repository cleanup removed dedicated benchmark tooling/workflows, generated results, placeholder directories, and the command-wrapper directory. Use direct .NET/npm/Docker commands and keep the deployed API smoke check in the existing xUnit integration project. Keep runtime measurements and correctness tests; write test/measurement artifacts outside the source tree. Essential service configuration is in `config` and the root Compose file, with project knowledge in README, codex.md, and these specifications. Native development uses shared .NET User Secrets; Compose reads root `.env`.
+Current capabilities, local commands, and validation limitations: [README](../README.md). Repository cleanup removed dedicated benchmark tooling/workflows, generated results, placeholder directories, and the command-wrapper directory. Use direct .NET/npm/Docker commands and keep the deployed API smoke check in the existing xUnit integration project. Keep runtime measurements and correctness tests, but do not create dedicated test-result/CI-artifact directories or files; use native job logs. Essential service configuration is in `config` and the root Compose file, with project knowledge in README, codex.md, and these specifications. Native development uses shared .NET User Secrets; Compose reads root `.env`.
 
 ## 1. Execution rules
 
@@ -220,7 +220,7 @@ Done when: A documented local command starts the full topology, files are availa
 ### T20 — Add GitHub Actions CI
 
 - [ ] Add PR workflows for locked restore/install, formatting/lint, backend/frontend builds and tests, architecture checks, real-infrastructure integration tests, migrations, and all three image builds.
-- [ ] Add end-to-end smoke execution and upload test/coverage artifacts. Run a small deterministic dataset to verify metric collection, not production speed.
+- [ ] Add end-to-end smoke execution with results in native CI logs. Do not create or upload dedicated test-result/coverage artifacts. Run a small deterministic dataset to verify correctness and metric collection, not production speed.
 - [ ] Document externally collected measurements with explicit size, concurrency, duration, artifact retention, and resource controls; keep real Resend calls disabled. A dedicated benchmark workflow is no longer part of the repository after the cleanup request.
 - [ ] Restrict workflow permissions and secret access; avoid automatically deploying from the validation workflow.
 
