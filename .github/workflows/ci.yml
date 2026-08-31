@@ -1,57 +1,118 @@
-name: Validate FileReport
+name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
-  group: validate-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NG_CLI_ANALYTICS: "false"
+
 jobs:
-  validate:
+  backend:
+    name: Backend
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 10.0.400
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore locked dependencies
+        run: dotnet restore FileReport.slnx --locked-mode --configfile NuGet.Config
+
+      - name: Verify formatting
+        run: dotnet format whitespace FileReport.slnx --no-restore --verify-no-changes
+
+      - name: Build
+        run: dotnet build FileReport.slnx --no-restore --configuration Release
+
+      - name: Run tests
+        run: >-
+          dotnet test FileReport.slnx
+          --no-build --no-restore
+          --configuration Release
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web/filereport-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.18.0
+          cache: npm
+          cache-dependency-path: web/filereport-ui/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify formatting
+        run: npm run format:check
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+  system:
+    name: PostgreSQL, RabbitMQ and deployed API
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       COMPOSE_PROJECT_NAME: filereport-ci-${{ github.run_id }}-${{ github.run_attempt }}
-      TEST_RESULTS_DIRECTORY: ${{ runner.temp }}/filereport-tests
-      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_ENVIRONMENT: Production
-      NG_CLI_ANALYTICS: "false"
       RabbitMq__Host: 127.0.0.1
       RabbitMq__Port: "55672"
       RabbitMq__User: filereport
       Jwt__Issuer: FileReport
       Jwt__Audience: FileReport.Web
-      Storage__Root: ${{ runner.temp }}/filereport-infrastructure-storage
+      Storage__Root: ${{ runner.temp }}
       Email__Mode: Fake
       Email__From: FileReport <reports@example.test>
       Email__ReportBaseUrl: http://localhost:8080
       Cors__Origin: http://localhost:8080
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
         with:
           dotnet-version: 10.0.400
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version: 24.18.0
-      - name: Locked backend restore
-        run: dotnet restore FileReport.slnx --locked-mode
-      - name: Locked frontend install
-        run: npm ci --prefix web/filereport-ui
-      - name: Build backend
-        run: dotnet build FileReport.slnx --no-restore --configuration Release
-      - name: Backend formatting
-        run: dotnet format whitespace FileReport.slnx --no-restore --verify-no-changes
-      - name: Backend tests
-        run: dotnet test FileReport.slnx --no-build --no-restore --configuration Release --logger trx --results-directory "$TEST_RESULTS_DIRECTORY"
-      - name: Frontend formatting
-        run: npm --prefix web/filereport-ui run format:check
-      - name: Build frontend
-        run: npm --prefix web/filereport-ui run build
-      - name: Frontend tests
-        run: npm --prefix web/filereport-ui test
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore and build test host
+        run: |
+          dotnet restore FileReport.slnx --locked-mode --configfile NuGet.Config
+          dotnet build FileReport.slnx --no-restore --configuration Release
+
       - name: Generate isolated credentials
         shell: bash
         run: |
@@ -69,29 +130,41 @@ jobs:
             echo "RabbitMq__Password=$broker_secret"
             echo "Jwt__SigningKey=$signing_key"
           } >> "$GITHUB_ENV"
-      - name: Start database and broker
+
+      - name: Start PostgreSQL and RabbitMQ
         run: docker compose up -d --wait postgres rabbitmq
-      - name: Create isolated infrastructure test database
+
+      - name: Prepare isolated test database
         run: docker compose exec -T postgres createdb -U filereport filereport_tests
+
       - name: Apply test database migrations
         run: dotnet run --project src/FileReport.Api --configuration Release --no-build -- --migrate
-      - name: Real infrastructure tests
+
+      - name: Run real-infrastructure tests
         env:
           RUN_INFRASTRUCTURE_TESTS: "1"
-        run: dotnet test tests/FileReport.IntegrationTests --no-build --no-restore --configuration Release --filter FullyQualifiedName~InfrastructureTests --logger trx --results-directory "$TEST_RESULTS_DIRECTORY"
-      - name: Build images and start application topology
+        run: >-
+          dotnet test tests/FileReport.IntegrationTests
+          --no-build --no-restore
+          --configuration Release
+          --filter FullyQualifiedName~InfrastructureTests
+
+      - name: Build and start the complete stack
         run: docker compose up -d --build --wait
-      - name: End-to-end API smoke with fake email
+
+      - name: Run deployed API smoke test
         env:
           FILEREPORT_SMOKE_BASE_URL: http://127.0.0.1:5080
-        run: dotnet test tests/FileReport.IntegrationTests --no-build --no-restore --configuration Release --filter FullyQualifiedName~DeployedApiTests --logger trx --results-directory "$TEST_RESULTS_DIRECTORY"
-      - name: Preserve test evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: validation-evidence
-          path: ${{ runner.temp }}/filereport-tests/**/*.trx
-          retention-days: 14
+        run: >-
+          dotnet test tests/FileReport.IntegrationTests
+          --no-build --no-restore
+          --configuration Release
+          --filter FullyQualifiedName~DeployedApiTests
+
       - name: Stop isolated services
         if: always()
-        run: docker compose down --volumes
+        shell: bash
+        run: |
+          if [[ -n "${POSTGRES_PASSWORD:-}" && -n "${RABBITMQ_PASSWORD:-}" && -n "${JWT_SIGNING_KEY:-}" ]]; then
+            docker compose down --volumes --remove-orphans
+          fi

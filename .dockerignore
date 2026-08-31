@@ -6,6 +6,5 @@
 .cache
 .local
 .git
-**/TestResults
 .env*
 !/.env.example
