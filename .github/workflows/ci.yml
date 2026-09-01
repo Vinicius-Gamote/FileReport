@@ -92,7 +92,6 @@ jobs:
       RabbitMq__User: filereport
       Jwt__Issuer: FileReport
       Jwt__Audience: FileReport.Web
-      Storage__Root: ${{ runner.temp }}
       Email__Mode: Fake
       Email__From: FileReport <reports@example.test>
       Email__ReportBaseUrl: http://localhost:8080
