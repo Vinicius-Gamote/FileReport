@@ -6,39 +6,80 @@ using FileReport.Domain.Comparisons;
 
 namespace FileReport.Infrastructure.Processing;
 
-// Byte-level framing bounds records before decoding or allocating their string representation.
-public sealed class StrictCsvReader(Stream stream, char delimiter, ProcessingSettings settings)
+// Source bytes are transcoded in a bounded stream before byte-level CSV framing.
+public sealed class StrictCsvReader : IDisposable
 {
     private static readonly UTF8Encoding Utf8 = new(false, true);
-    private readonly byte[] _buffer = new byte[settings.IoBufferBytes];
+    private static readonly Encoding Windows1252 = CreateWindows1252();
+    private readonly Stream _stream;
+    private readonly char _delimiter;
+    private readonly ProcessingSettings _settings;
+    private readonly byte[] _buffer;
+    private readonly Queue<int> _pending = new(3);
+    private readonly bool _disposeStream;
+    private readonly string _decodeFailureCode;
     private int _position, _length;
     private bool _started;
-    private int _pending = -1;
     public long BytesRead { get; private set; }
     public long LogicalRecords { get; private set; }
 
+    public StrictCsvReader(Stream stream, CsvFormat format, ProcessingSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(format);
+        _settings = settings;
+        _delimiter = format.Delimiter;
+        _buffer = new byte[settings.IoBufferBytes];
+        _decodeFailureCode = format.Encoding == CsvEncoding.Utf8 ? "InvalidUtf8" : "InvalidEncoding";
+        _stream = format.Encoding switch
+        {
+            CsvEncoding.Utf8 => stream,
+            CsvEncoding.Windows1252 => Encoding.CreateTranscodingStream(stream, Windows1252, Utf8, leaveOpen: true),
+            CsvEncoding.Utf16LittleEndian => Encoding.CreateTranscodingStream(stream,
+                new UnicodeEncoding(false, true, true), Utf8, leaveOpen: true),
+            CsvEncoding.Utf16BigEndian => Encoding.CreateTranscodingStream(stream,
+                new UnicodeEncoding(true, true, true), Utf8, leaveOpen: true),
+            _ => throw Fault("InvalidEncoding")
+        };
+        _disposeStream = !ReferenceEquals(_stream, stream);
+    }
+
+    private static Encoding CreateWindows1252()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return Encoding.GetEncoding(1252, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+    }
+
     private async ValueTask<int> Next(CancellationToken ct)
     {
-        if (_pending >= 0) { var pending = _pending; _pending = -1; return pending; }
+        if (_pending.TryDequeue(out var pending)) return pending;
         if (_position == _length)
         {
-            _length = await stream.ReadAsync(_buffer, ct); _position = 0;
+            try { _length = await _stream.ReadAsync(_buffer, ct); }
+            catch (DecoderFallbackException) { throw Fault(_decodeFailureCode); }
+            _position = 0;
             if (_length == 0) return -1;
         }
         BytesRead++; return _buffer[_position++];
     }
     public async Task<string[]?> Read(CancellationToken ct)
     {
-        _ = new CsvFormat(delimiter);
         if (!_started)
         {
             _started = true;
             var first = await Next(ct);
             if (first == 0xEF)
             {
-                if (await Next(ct) != 0xBB || await Next(ct) != 0xBF) throw Fault("InvalidUtf8");
+                var second = await Next(ct);
+                var third = second == 0xBB ? await Next(ct) : -1;
+                if (second != 0xBB || third != 0xBF)
+                {
+                    _pending.Enqueue(first);
+                    if (second >= 0) _pending.Enqueue(second);
+                    if (third >= 0) _pending.Enqueue(third);
+                }
             }
-            else _pending = first;
+            else if (first >= 0) _pending.Enqueue(first);
         }
         var fields = new List<string>();
         using var field = new MemoryStream();
@@ -46,12 +87,12 @@ public sealed class StrictCsvReader(Stream stream, char delimiter, ProcessingSet
         int rawBytes = 0;
         void Append(int value)
         {
-            if (field.Length >= settings.MaxFieldBytes) throw Fault("FieldLimit");
+            if (field.Length >= _settings.MaxFieldBytes) throw Fault("FieldLimit");
             field.WriteByte((byte)value);
         }
         void FinishField()
         {
-            if (fields.Count >= settings.MaxColumns) throw Fault("ColumnLimit");
+            if (fields.Count >= _settings.MaxColumns) throw Fault("ColumnLimit");
             try { fields.Add(Utf8.GetString(field.GetBuffer(), 0, checked((int)field.Length))); }
             catch (DecoderFallbackException) { throw Fault("InvalidUtf8"); }
             field.SetLength(0); closed = false; fieldStart = true;
@@ -67,7 +108,7 @@ public sealed class StrictCsvReader(Stream stream, char delimiter, ProcessingSet
                 FinishField(); LogicalRecords++; return fields.ToArray();
             }
             hasData = true;
-            if (++rawBytes > settings.MaxRecordBytes) throw Fault("RecordLimit");
+            if (++rawBytes > _settings.MaxRecordBytes) throw Fault("RecordLimit");
             if (quoted)
             {
                 if (value == '"') { quoted = false; closed = true; }
@@ -75,13 +116,13 @@ public sealed class StrictCsvReader(Stream stream, char delimiter, ProcessingSet
                 continue;
             }
             if (closed && value == '"') { Append(value); quoted = true; closed = false; continue; }
-            if (value == delimiter) { FinishField(); continue; }
+            if (value == _delimiter) { FinishField(); continue; }
             if (value is 10 or 13)
             {
                 if (value == 13)
                 {
                     if (await Next(ct) != 10) throw Fault("MalformedCsv");
-                    if (++rawBytes > settings.MaxRecordBytes) throw Fault("RecordLimit");
+                    if (++rawBytes > _settings.MaxRecordBytes) throw Fault("RecordLimit");
                 }
                 FinishField(); LogicalRecords++; return fields.ToArray();
             }
@@ -94,13 +135,20 @@ public sealed class StrictCsvReader(Stream stream, char delimiter, ProcessingSet
             fieldStart = false; Append(value);
         }
     }
-    private static DomainException Fault(string code) => new(code, "CSV validation failed. No cell content is included in diagnostics.");
+    public void Dispose()
+    {
+        if (_disposeStream) _stream.Dispose();
+    }
+    private static DomainException Fault(string code) => code is "InvalidUtf8" or "InvalidEncoding"
+        ? new(code, "The selected source encoding could not decode the CSV. Choose the file's actual encoding or export it as UTF-8.")
+        : new(code, "CSV validation failed. No cell content is included in diagnostics.");
 }
 public sealed class CsvPreview(ProcessingSettings settings) : ICsvPreview
 {
-    public async Task<string[]> Headers(Stream input, char delimiter, CancellationToken ct)
+    public async Task<string[]> Headers(Stream input, CsvFormat format, CancellationToken ct)
     {
-        var header = await new StrictCsvReader(input, delimiter, settings).Read(ct)
+        using var reader = new StrictCsvReader(input, format, settings);
+        var header = await reader.Read(ct)
             ?? throw new DomainException("MissingHeader", "A nonempty CSV header is required.");
         if (header.Any(string.IsNullOrEmpty) || header.Distinct(StringComparer.Ordinal).Count() != header.Length)
             throw new DomainException("InvalidHeader", "Headers must be nonempty and unique.");

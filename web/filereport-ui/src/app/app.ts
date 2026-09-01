@@ -44,11 +44,19 @@ export class App implements OnDestroy {
   columns: string[] = [];
   baselineDelimiter = ',';
   candidateDelimiter = ',';
+  baselineEncoding = 'Utf8';
+  candidateEncoding = 'Utf8';
   allColumns = true;
   readonly delimiters = [
     { label: 'Comma', value: ',' },
     { label: 'Semicolon', value: ';' },
     { label: 'Tab', value: '\t' },
+  ];
+  readonly encodings = [
+    { label: 'UTF-8', value: 'Utf8' },
+    { label: 'Windows-1252 (Excel / legacy)', value: 'Windows1252' },
+    { label: 'UTF-16 little-endian', value: 'Utf16LittleEndian' },
+    { label: 'UTF-16 big-endian', value: 'Utf16BigEndian' },
   ];
   private reportJob: string | null = null;
   private timer = setInterval(() => {
@@ -110,7 +118,12 @@ export class App implements OnDestroy {
   }
   async preview(): Promise<void> {
     if (this.workspace.job()?.files.length !== 2) return;
-    const result = await this.workspace.headers(this.baselineDelimiter, this.candidateDelimiter);
+    const result = await this.workspace.headers(
+      this.baselineDelimiter,
+      this.candidateDelimiter,
+      this.baselineEncoding,
+      this.candidateEncoding,
+    );
     this.headers.set(result['Baseline'] ?? []);
     this.keys = this.keys.filter((k) => this.headers().includes(k));
     this.columns = this.columns.filter((k) => this.headers().includes(k) && !this.keys.includes(k));
@@ -122,6 +135,8 @@ export class App implements OnDestroy {
         this.allColumns ? null : this.columns,
         this.baselineDelimiter,
         this.candidateDelimiter,
+        this.baselineEncoding,
+        this.candidateEncoding,
       );
       await this.loadHistory();
     });

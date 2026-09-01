@@ -27,11 +27,15 @@ public static class ComparisonEndpoints
             Results.Ok(Transport.Job(await service.Get(Transport.Owner(user), id, ct), config["Email:Mode"])));
         api.MapPut("/comparisons/{id:guid}/files/{side}", Upload);
         api.MapGet("/comparisons/{id:guid}/schema", async (Guid id, ClaimsPrincipal user, ComparisonService service,
-            string? baselineDelimiter, string? candidateDelimiter, CancellationToken ct) =>
-            Results.Ok(await service.Headers(Transport.Owner(user), id, Transport.Delimiter(baselineDelimiter ?? ","), Transport.Delimiter(candidateDelimiter ?? ","), ct)));
+            string? baselineDelimiter, string? candidateDelimiter, string? baselineEncoding, string? candidateEncoding,
+            CancellationToken ct) => Results.Ok(await service.Headers(Transport.Owner(user), id,
+                new(Transport.Delimiter(baselineDelimiter ?? ","), Transport.CsvEncoding(baselineEncoding ?? "Utf8")),
+                new(Transport.Delimiter(candidateDelimiter ?? ","), Transport.CsvEncoding(candidateEncoding ?? "Utf8")), ct)));
         api.MapPatch("/comparisons/{id:guid}/options", async (Guid id, OptionsRequest body, HttpContext context, ComparisonService service, CancellationToken ct) =>
             Results.Ok(Transport.Job(await service.Options(Transport.Owner(context.User), id, Transport.Revision(context.Request),
-                body.Keys, body.Columns, Transport.Delimiter(body.BaselineDelimiter), Transport.Delimiter(body.CandidateDelimiter), ct))));
+                body.Keys, body.Columns,
+                new(Transport.Delimiter(body.BaselineDelimiter), Transport.CsvEncoding(body.BaselineEncoding)),
+                new(Transport.Delimiter(body.CandidateDelimiter), Transport.CsvEncoding(body.CandidateEncoding)), ct))));
         api.MapPost("/comparisons/{id:guid}/submit", async (Guid id, HttpContext context, ComparisonService service, CancellationToken ct) =>
             Results.Accepted($"/api/v1/comparisons/{id}", Transport.Job(await service.Submit(Transport.Owner(context.User), id,
                 Transport.Revision(context.Request), context.Request.Headers["Idempotency-Key"].ToString(), ct))));

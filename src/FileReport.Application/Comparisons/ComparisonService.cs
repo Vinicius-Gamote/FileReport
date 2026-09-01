@@ -68,9 +68,9 @@ public sealed class ComparisonService(IJobRepository jobs, IFileStore files, ICs
         return await jobs.Get(id, owner, ct);
     }
 
-    public async Task<Dictionary<string, string[]>> Headers(Guid owner, Guid id, char baseline, char candidate, CancellationToken ct)
+    public async Task<Dictionary<string, string[]>> Headers(Guid owner, Guid id,
+        CsvFormat baseline, CsvFormat candidate, CancellationToken ct)
     {
-        _ = new CsvFormat(baseline); _ = new CsvFormat(candidate);
         var doc = await jobs.Get(id, owner, ct);
         var result = new Dictionary<string, string[]>();
         foreach (var f in doc.Files)
@@ -83,9 +83,9 @@ public sealed class ComparisonService(IJobRepository jobs, IFileStore files, ICs
     }
 
     public async Task<JobDocument> Options(Guid owner, Guid id, long revision, string[] keys,
-        string[]? columns, char baseline, char candidate, CancellationToken ct)
+        string[]? columns, CsvFormat baseline, CsvFormat candidate, CancellationToken ct)
     {
-        var options = new ComparisonOptions(keys, columns, new(baseline), new(candidate));
+        var options = new ComparisonOptions(keys, columns, baseline, candidate);
         var headers = await Headers(owner, id, baseline, candidate, ct);
         if (headers.Count != 2) throw new RequestException("FilesRequired", "Upload both files first.", 409);
         _ = new ComparisonSchema(headers["Baseline"], headers["Candidate"], options);

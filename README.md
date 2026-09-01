@@ -151,12 +151,12 @@ This retains named volumes. Add `--volumes` only when you intentionally want to 
 
 1. Register or sign in. Account creation does not require email confirmation.
 2. Choose Baseline and Candidate CSV files.
-3. Select the composite key and optional comparison columns.
+3. Select each file's delimiter and source encoding, then choose the composite key and optional comparison columns.
 4. Submit the job and monitor upload/processing status.
 5. Inspect charts, file-quality metrics, counts, samples, and attempt history.
 6. Download the differences artifact or explicitly request an email summary.
 
-CSV row order does not affect matching. Values use exact ordinal string comparison; there is no implicit trimming, type conversion, fuzzy matching, or automatic key inference.
+CSV row order does not affect matching. UTF-8 is the default; Windows-1252 and UTF-16 can be selected independently for Baseline and Candidate and are transcoded as bounded streams. Values use exact ordinal string comparison; there is no silent encoding fallback, implicit trimming, type conversion, fuzzy matching, or automatic key inference.
 
 ## API surface
 

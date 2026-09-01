@@ -100,19 +100,31 @@ export class Workspace {
         }),
     );
   }
-  async headers(baseline: string, candidate: string): Promise<Record<string, string[]>> {
+  async headers(
+    baselineDelimiter: string,
+    candidateDelimiter: string,
+    baselineEncoding: string,
+    candidateEncoding: string,
+  ): Promise<Record<string, string[]>> {
     return firstValueFrom(
       this.http.get<Record<string, string[]>>(`/api/v1/comparisons/${this.job()!.id}/schema`, {
         headers: this.session.headers(),
-        params: { baselineDelimiter: baseline, candidateDelimiter: candidate },
+        params: {
+          baselineDelimiter,
+          candidateDelimiter,
+          baselineEncoding,
+          candidateEncoding,
+        },
       }),
     );
   }
   async submit(
     keys: string[],
     columns: string[] | null,
-    baseline: string,
-    candidate: string,
+    baselineDelimiter: string,
+    candidateDelimiter: string,
+    baselineEncoding: string,
+    candidateEncoding: string,
   ): Promise<void> {
     if (!this.submitRequest) {
       const job = this.job()!;
@@ -120,7 +132,14 @@ export class Workspace {
         await firstValueFrom(
           this.http.patch<Job>(
             `/api/v1/comparisons/${job.id}/options`,
-            { keys, columns, baselineDelimiter: baseline, candidateDelimiter: candidate },
+            {
+              keys,
+              columns,
+              baselineDelimiter,
+              candidateDelimiter,
+              baselineEncoding,
+              candidateEncoding,
+            },
             { headers: this.session.headers({ 'If-Match': job.revision }) },
           ),
         ),
