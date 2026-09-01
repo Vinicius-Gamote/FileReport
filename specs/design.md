@@ -59,11 +59,6 @@ src/
   FileReport.Worker/
 web/
   filereport-ui/
-tests/
-  FileReport.Domain.Tests/
-  FileReport.Application.Tests/
-  FileReport.IntegrationTests/
-  FileReport.ArchitectureTests/
 config/
 specs/
 .github/workflows/
@@ -72,7 +67,7 @@ README.md
 codex.md
 ```
 
-Use direct .NET, npm, and Docker Compose commands documented in README; no helper-script directory is required. Compose reads root `.env` with mandatory private credentials. API and worker share a native .NET `UserSecretsId` for Development; environment variables override that configuration. Tests report through native console/CI logs without dedicated result directories or uploaded artifacts. The opt-in deployed API smoke test lives in the existing integration test project, and CI uses isolated runtime database/file storage for infrastructure tests.
+Use direct .NET, npm, and Docker Compose commands documented in README; no helper-script directory is required. Compose reads root `.env` with mandatory private credentials. API and worker share a native .NET `UserSecretsId` for Development; environment variables override that configuration. The root backend `tests` directory was removed by explicit scope decision on 2026-08-31 and must not be recreated without another scope change. Colocated Angular specifications remain. CI performs formatting, build, Compose, and image validation without generating test-result or cache directories in the repository. Backend correctness, recovery, and infrastructure acceptance evidence therefore remain open gaps.
 
 - **Comparisons context:** `ComparisonJob` is the aggregate root controlling owner, file slots, immutable submitted options, state transitions, current attempt, and final report reference. `ComparisonOptions`, `CompositeKey`, and classified differences express domain rules. `ProcessingAttempt` preserves execution history. Do not load all rows or samples into the aggregate.
 - **Identity context:** ASP.NET Core Identity supplies account/password infrastructure. JWT issuance is an application use case. Identity framework entities stay out of comparison domain rules.
@@ -82,7 +77,7 @@ Use direct .NET, npm, and Docker Compose commands documented in README; no helpe
 - **Hosts:** API endpoints and the worker consumer validate transport contracts and call use cases. The API is not where comparison algorithms run.
 - **Contracts:** versioned HTTP/event DTOs and safe error codes. Do not serialize EF entities or domain aggregates onto the wire.
 
-Dependency direction: Domain has no framework dependencies; Application depends on Domain; Infrastructure implements application ports; API/Worker compose them. Contracts do not expose infrastructure types. Prefer a small modular system with these boundaries over a separate service for every entity. Use xUnit for backend tests and the supported Angular test tooling selected with the Angular version.
+Dependency direction: Domain has no framework dependencies; Application depends on Domain; Infrastructure implements application ports; API/Worker compose them. Contracts do not expose infrastructure types. Prefer a small modular system with these boundaries over a separate service for every entity. The supported Angular test tooling validates colocated frontend specifications; backend verification is currently limited to formatting and compilation.
 
 ## 4. Data model and persistence
 
@@ -326,13 +321,13 @@ Minimum report columns: `runId`, `commit`, `fixture/seed`, `actualInputBytes`, `
 - Keep file keys generated and private, prohibit path traversal/execute permissions, and confine cleanup to configured storage roots. Treat input as untrusted text; choose any required malware-scanning policy before external exposure. Do not log payloads or signed download/query tokens.
 - Use least-privilege database roles, broker vhosts/users, and storage permissions. Keep Resend/JWT/database credentials in environment/secret providers and out of checked-in Compose values. Readiness reports dependency failures without exposing credentials; liveness does not restart a healthy process just because a dependency is unavailable.
 - Provide separate multi-stage Dockerfiles for Gateway, worker, and Angular static hosting. Run as non-root where supported. Compose includes PostgreSQL, RabbitMQ with declared topology/DLQ, persistent database/broker/file volumes, bounded scratch storage, and health checks. A reverse proxy must support streaming and SignalR upgrade/timeout settings.
-- GitHub Actions performs locked restore/install, formatting/lint, builds, domain/application/frontend tests, real PostgreSQL/RabbitMQ integration tests, migration checks, image builds, and small end-to-end smoke checks. Results remain in native job logs; CI does not create or upload dedicated test-result/coverage artifacts. Dedicated benchmark workflows/runners are not maintained in the repository after the requested cleanup. Future measurement exercises require a separately approved location and explicit resource limits; shared CI timings are not production measurements.
+- GitHub Actions performs locked restore/install, formatting, backend and frontend builds, colocated frontend specifications, Compose validation, and API/worker/web image builds. It does not run backend, infrastructure, migration, or end-to-end tests and does not create or upload dedicated test-result, coverage, or repository cache artifacts. Dedicated benchmark workflows/runners are not maintained in the repository after the requested cleanup. Future measurement exercises require a separately approved location and explicit resource limits; shared CI timings are not production measurements.
 - Future deployment requires storage durable across hosts, a tested SignalR scale-out strategy before multiple Gateways, TLS/DNS, secret rotation, migrations with compatibility/rollback planning, backup and restore tests for PostgreSQL and files, broker recovery, retention, alerts, and cost review. Compose is a development topology, not a high-availability statement. Building these specifications does not publish or deploy anything.
 
-## 12. Test strategy and design-change rules
+## 12. Validation gaps and design-change rules
 
-Domain tests cover comparison categories, keys, string semantics, state transitions, and invariants. Application tests cover idempotency, retries, authorization decisions, and unknown email outcomes with controlled ports. Parser/sorter tests use deterministic fixtures, small chunk limits to force multi-run merging, duplicate keys across runs, and capped diagnostics.
+The repository intentionally has no backend test projects. Domain semantics, persistence constraints, broker behavior, recovery, authorization, file lifecycle, HTTP/SignalR behavior, and end-to-end correctness therefore lack executable acceptance evidence in the current scope. Compilation and formatting establish code health only; they do not prove those behaviors.
 
-Integration tests use real PostgreSQL and RabbitMQ to verify migrations, unique constraints, concurrent claims, outbox publication, acknowledgments, DLQ policies, lease fencing, and crash windows. File tests verify partial/final artifacts, quotas, orphan reconciliation, and restart recovery. HTTP/SignalR tests verify JWT ownership, revisions, and reconnect. End-to-end tests cover login, upload, comparison dashboard, and explicit email using a fake Resend adapter; CI must not send real email.
+Colocated Angular specifications remain and CI runs them with a fake/local-only integration posture. CI must not send real email. Reintroducing backend automated verification requires an explicit scope change and must not silently recreate `tests`, `.cache`, generated result folders, or CI artifacts.
 
 Every implementation task maps to requirements in `tasks.md`. Update these specifications before changing comparison meaning, ownership/security rules, delivery semantics, storage responsibilities, or scope. Record measured evidence separately from design intent; unsuccessful experiments and known limitations remain part of the record.

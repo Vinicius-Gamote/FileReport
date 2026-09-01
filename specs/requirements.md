@@ -1,14 +1,14 @@
 # FileReport — Requirements
 
 Status: Comparison pipeline implemented; complete acceptance and a validated operating envelope remain pending.  
-Language: English for code, API contracts, UI, messages, tests, and documentation.  
+Language: English for code, API contracts, UI, messages, logs, reports, and documentation.
 Related specifications: [System design](design.md) and [Implementation tasks](tasks.md).
 
 ## 1. Purpose and scope
 
 FileReport will compare large CSV files, analyze their data quality, and present asynchronous results in an authenticated dashboard. Every evaluated workload must document its input volume, memory consumption, elapsed time, failures, and cost assumptions. There is no throughput, maximum supported file size, latency, memory, availability, or cost guarantee before measurement.
 
-Repository organization: retain source, real tests, configuration, and SDD documents. Use native .NET/npm/Docker commands without a repository helper-script directory. Following the requested cleanup, dedicated benchmark tooling/workflows, generated datasets/results, test-result directories, and CI artifact files are not maintained in the source tree. Tests report through console/CI logs. Runtime metrics and the evidence requirements below remain applicable. Local service configuration is consolidated in the root Compose file and `config`; Compose reads `.env`, while native .NET development uses shared User Secrets and environment variables.
+Repository organization: retain source, configuration, and SDD documents. Use native .NET/npm/Docker commands without a repository helper-script directory. The root `tests` and `.cache` directories were removed by explicit scope decision on 2026-08-31 and must not be recreated implicitly. Angular's local workspace cache is disabled; dependency caches, when supplied by tools or CI hosts, must remain outside the repository. Colocated frontend specifications remain, while backend automated correctness and recovery evidence is an acknowledged gap. Dedicated benchmark tooling/workflows, generated datasets/results, test-result directories, and CI artifact files are not maintained in the source tree. Runtime metrics and the evidence requirements below remain applicable. Local service configuration is consolidated in the root Compose file and `config`; Compose reads `.env`, while native .NET development uses shared User Secrets and environment variables.
 
 ### Initial product decisions
 
@@ -30,7 +30,7 @@ Repository organization: retain source, real tests, configuration, and SDD docum
 | Frontend | Angular, TypeScript, Angular Material, Chart.js, SignalR JavaScript client |
 | Files | Private streamed storage through an abstraction; persistent shared Docker volume initially |
 | Email | Resend, invoked only from the backend following an explicit **Send by email** action |
-| Tests | .NET unit tests, Angular unit/component tests, integration tests against real infrastructure, end-to-end checks, reproducible benchmarks |
+| Validation | Backend formatting and build; frontend formatting, production build, and colocated specifications; Compose and application image builds. No backend test projects. |
 | Observability | Structured logs, OpenTelemetry instrumentation, runtime/container resource measurements, persisted job metrics |
 | Delivery | GitHub Actions CI; Dockerfiles for API, worker, and frontend; `docker-compose.yml`; future deployment documentation |
 
@@ -191,14 +191,14 @@ Acceptance criteria:
 | --- | --- | --- |
 | NFR-001 | Large-file processing shall use streamed I/O and bounded parser, sort, merge, sample, and message buffers. Concurrency, scratch space, output size, and storage quotas shall be configurable. | Review excludes whole-file materialization and unbounded key dictionaries; benchmarks record memory and scratch usage; limit and disk-full tests produce explicit failures. Bounded buffers are an implementation constraint, not an unmeasured memory guarantee. |
 | NFR-002 | Production traffic shall use TLS; secrets shall remain out of source control, images, browser bundles, logs, URLs other than constrained hub token transport, and reports. | Security checks cover JWT validation, owner isolation, hub token-log redaction, restrictive CORS, rate limits, escaped output, private infrastructure, and least-privilege service accounts. |
-| NFR-003 | Jobs and final results shall remain recoverable from process restarts and transient infrastructure faults. | Real-infrastructure tests demonstrate transactional outbox behavior, deduplication, lease fencing, retries, final-artifact consistency, and dead-letter handling. Recovery time is measured, not guaranteed. |
-| NFR-004 | DDD boundaries shall separate business rules from EF Core, RabbitMQ, HTTP, SignalR, storage, and Resend. | Domain unit tests execute without infrastructure; architecture checks enforce dependency direction; endpoint and worker hosts delegate to application use cases. |
+| NFR-003 | Jobs and final results shall remain recoverable from process restarts and transient infrastructure faults. | Unverified under the current no-backend-tests scope. Transactional outbox, deduplication, lease fencing, retries, final-artifact consistency, and dead-letter behavior require future executable evidence. Recovery time is measured, not guaranteed. |
+| NFR-004 | DDD boundaries shall separate business rules from EF Core, RabbitMQ, HTTP, SignalR, storage, and Resend. | Project references and code review preserve dependency direction; endpoint and worker hosts delegate to application use cases. No executable architecture test currently enforces the boundary. |
 | NFR-005 | Diagnostic data shall support investigation without collecting raw CSV values or unbounded metric labels. | Correlated logs/traces connect API, outbox, broker, worker, and email; job IDs appear in logs/traces rather than time-series labels. Queue depth/age, failures, resource limits, pending outbox age, and DLQ depth are observable. |
-| NFR-006 | Correctness and fault handling shall be tested at the appropriate layer. | Unit, integration, frontend, and end-to-end evidence covers the acceptance criteria; seeded fixtures define expected results; PostgreSQL/RabbitMQ tests do not rely on in-memory substitutes for infrastructure semantics. |
-| NFR-007 | GitHub Actions shall validate changes and expose reproducible build/test outcomes. | PR CI restores locked dependencies, checks formatting/lint, builds, runs tests, checks migrations, builds all images, and retains outcomes in native job logs. It does not create or upload dedicated test-result/coverage artifacts. Small correctness smoke tests do not claim production capacity. |
+| NFR-006 | Correctness and fault handling shall be tested at the appropriate layer. | Backend test projects were removed by current scope, so backend correctness and fault-handling acceptance remains unverified. Colocated frontend specifications provide limited UI evidence only. |
+| NFR-007 | GitHub Actions shall validate changes and expose reproducible build outcomes. | PR CI restores locked dependencies, checks formatting, builds backend/frontend and all application images, runs colocated frontend specifications, and validates Compose. It does not run backend/infrastructure/end-to-end tests or create/upload result, coverage, or repository cache artifacts. |
 | NFR-008 | Docker-based local operation and later deployment shall be documented. | Three Dockerfiles and Compose start frontend, API, worker, PostgreSQL, and RabbitMQ with health checks, persistent volumes, secrets configuration, and no committed credentials. Backup/restore, migrations, rollback, TLS, resource limits, storage, and SignalR scale-out are deployment checklist items. |
 | NFR-009 | Benchmarks shall be reproducible and honest about uncertainty. | An opt-in matrix varies measured bytes/records, row width, differences, ordering, invalid input, and concurrency. Reports include environment, commit/configuration, repetitions, failures, memory, all timing boundaries, and cost status. Performance budgets are introduced only after reviewed measurements. |
-| NFR-010 | The entire product shall use English. | UI labels, **Send by email**, API field names, status/error messages, code identifiers, test names, reports, logs, and documentation are English; original user filenames and CSV contents remain unchanged. |
+| NFR-010 | The entire product shall use English. | UI labels, **Send by email**, API field names, status/error messages, code identifiers, reports, logs, documentation, and remaining frontend specification names are English; original user filenames and CSV contents remain unchanged. |
 
 ## 5. Scope exclusions and remaining evidence
 

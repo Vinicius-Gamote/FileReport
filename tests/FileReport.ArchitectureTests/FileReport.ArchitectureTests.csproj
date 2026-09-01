@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="../../src/FileReport.Infrastructure/FileReport.Infrastructure.csproj" />
-    <ProjectReference Include="../../src/FileReport.Contracts/FileReport.Contracts.csproj" />
-  </ItemGroup>
-</Project>
