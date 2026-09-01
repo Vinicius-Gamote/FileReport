@@ -66,12 +66,12 @@ PostgreSQL is the authoritative source for job state. SignalR events are notific
 The exact contract is defined by FR-004 and FR-005.
 
 - Exactly two files participate in a comparison. Match rows by one or more user-selected key columns, independent of row order. Do not infer keys or perform positional matching.
-- Accept UTF-8 with an optional initial BOM and a required header. Default to comma, with semicolon/tab selectable per file. Support quoted fields, escaped quotes, embedded delimiters, multiline fields, and LF/CRLF endings.
+- Require a header and an explicit encoding for each file. Default to strict UTF-8 with an optional initial BOM; also support Windows-1252, UTF-16 little-endian, and UTF-16 big-endian through bounded streaming transcoding. Default to comma, with semicolon/tab selectable per file. Support quoted fields, escaped quotes, embedded delimiters, multiline fields, and LF/CRLF endings. Never apply silent encoding fallback.
 - Headers must be nonempty, unique, case-sensitive, and untrimmed. Both files require the same header set, but header order may differ.
 - Compare decoded strings using ordinal, case-sensitive equality. Do not implicitly trim, normalize Unicode, convert numbers/dates, or infer nulls. Empty quoted/unquoted fields are empty strings; `NULL` is literal text.
 - Keys must have nonempty components and be unique within each file. Duplicate keys fail validation even for identical rows. Composite key encoding must not collide through delimiter concatenation.
 - Compare all non-key columns by default, or a selected nonempty subset when such columns exist. Key-only schemas are valid and cannot contain changed records.
-- Zero-byte input, invalid UTF-8, malformed records, missing/extra fields, invalid keys, schema mismatch, and configured field/record limits produce explicit validation errors. Header-only files contain zero data records and are valid.
+- Zero-byte input, bytes invalid for the selected encoding, malformed records, missing/extra fields, invalid keys, schema mismatch, and configured field/record limits produce explicit validation errors. Header-only files contain zero data records and are valid.
 - Do not silently skip blank records or invalid data. A final record terminator alone creates no extra record. Fatal errors may stop a scan; remaining totals must then be marked unknown and diagnostics partial.
 
 | Classification | Meaning |

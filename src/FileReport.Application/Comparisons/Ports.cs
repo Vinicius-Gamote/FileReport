@@ -19,7 +19,7 @@ public interface IFileStore
 }
 public interface ICsvPreview
 {
-    Task<string[]> Headers(Stream input, char delimiter, CancellationToken ct);
+    Task<string[]> Headers(Stream input, CsvFormat format, CancellationToken ct);
 }
 public interface IComparisonEngine
 {

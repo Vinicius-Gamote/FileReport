@@ -78,10 +78,10 @@ The system shall use a streaming CSV parser with an explicit, versioned format c
 
 Acceptance criteria:
 
-- Each file is UTF-8, with an optional BOM and a required header. Comma is the default delimiter; semicolon or tab can be selected per file. Quotes, escaped quotes, embedded delimiters, quoted multiline fields, and LF/CRLF record endings are handled.
+- Each file has a required header and an explicit per-file source encoding. UTF-8 is the default and accepts an optional initial BOM; Windows-1252, UTF-16 little-endian, and UTF-16 big-endian are also supported through bounded streaming transcoding. Comma is the default delimiter; semicolon or tab can be selected per file. Quotes, escaped quotes, embedded delimiters, quoted multiline fields, and LF/CRLF record endings are handled.
 - Header names are nonempty and unique, case-sensitive, and not trimmed. Both files must have the same set of headers; column order may differ. Selected key and comparison columns must exist in both.
 - Values are compared as decoded strings, using ordinal, case-sensitive equality with no implicit trimming, numeric/date conversion, Unicode normalization, or null inference. An empty quoted or unquoted field is an empty string; `NULL` is literal text.
-- Zero-byte files, malformed records, invalid UTF-8, missing fields, extra fields, empty key components, duplicate keys, and configured record/field limits produce explicit validation errors. Blank records are validated rather than silently skipped; a final record terminator alone does not add a record. A header-only file is valid and contains zero data records.
+- Zero-byte files, bytes invalid for the selected encoding, malformed records, missing fields, extra fields, empty key components, duplicate keys, and configured record/field limits produce explicit validation errors. Encoding fallback is never silent. Blank records are validated rather than silently skipped; a final record terminator alone does not add a record. A header-only file is valid and contains zero data records.
 - Invalid data prevents a successful comparison. Fatal parse errors may stop scanning; counts and diagnostics then disclose their partial scope. The system never silently drops invalid rows to produce an apparently complete comparison.
 
 ### FR-005 — Deterministic comparison

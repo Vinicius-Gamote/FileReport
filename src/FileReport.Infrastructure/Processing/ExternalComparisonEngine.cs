@@ -40,8 +40,8 @@ public sealed class ExternalComparisonEngine(IFileStore store, ProcessingSetting
         {
             using var baseline = store.Open(document.Files.Single(f => f.Side == FileSide.Baseline).Id);
             using var candidate = store.Open(document.Files.Single(f => f.Side == FileSide.Candidate).Id);
-            var left = new StrictCsvReader(baseline, options.BaselineFormat.Delimiter, settings);
-            var right = new StrictCsvReader(candidate, options.CandidateFormat.Delimiter, settings);
+            using var left = new StrictCsvReader(baseline, options.BaselineFormat, settings);
+            using var right = new StrictCsvReader(candidate, options.CandidateFormat, settings);
             var bh = await left.Read(ct) ?? throw new DomainException("MissingHeader", "Baseline has no header.");
             var ch = await right.Read(ct) ?? throw new DomainException("MissingHeader", "Candidate has no header.");
             var schema = new ComparisonSchema(bh, ch, options);
@@ -106,7 +106,7 @@ public sealed class ExternalComparisonEngine(IFileStore store, ProcessingSetting
             timers["artifactFinalization"] = sw.Elapsed.TotalSeconds;
             await samplerCancellation.CancelAsync(); await sampler; Sample();
             var metrics = new AttemptMetrics(document.Snapshot.NextAttemptNumber, document.Files.Sum(f => f.Bytes),
-                left.BytesRead + right.BytesRead + disk.ReadBytes, disk.WrittenBytes, disk.Peak,
+                document.Files.Sum(f => f.Bytes) + disk.ReadBytes, disk.WrittenBytes, disk.Peak,
                 sortedLeft.Count, sortedRight.Count, watch.Elapsed.TotalSeconds,
                 (process.TotalProcessorTime - cpuStart).TotalSeconds, peakRss, peakHeap,
                 GC.GetTotalAllocatedBytes() - allocatedStart, settings.ResourceSamplingIntervalMilliseconds,

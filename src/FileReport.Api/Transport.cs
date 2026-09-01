@@ -15,6 +15,10 @@ public static class Transport
         : throw new RequestException("PreconditionRequired", "Supply the current revision in If-Match.", 428);
     public static char Delimiter(string value) => value.Length == 1 ? value[0]
         : throw new RequestException("InvalidDelimiter", "Select comma, semicolon, or tab.");
+    public static Domain.Comparisons.CsvEncoding CsvEncoding(string value) =>
+        Enum.TryParse<Domain.Comparisons.CsvEncoding>(value, true, out var encoding) && Enum.IsDefined(encoding)
+            ? encoding
+            : throw new RequestException("InvalidEncoding", "Select UTF-8, Windows-1252, UTF-16 LE, or UTF-16 BE.");
     public static JobResponse Job(JobDocument doc, string? emailMode = null)
     {
         var s = doc.Snapshot;
@@ -22,7 +26,7 @@ public static class Transport
             doc.Files.Select(f => (object)new { f.Id, side = f.Side.ToString(), f.Name, f.Bytes, f.Sha256, f.StoredAtUtc, f.ExpiresAtUtc }).ToArray(),
             doc.ServerReceivedBytes.ToString(CultureInfo.InvariantCulture), s.CreatedAtUtc, s.SubmittedAtUtc, s.TerminalAtUtc, s.FailureCode,
             s.Attempts.Cast<object>().ToArray(), doc.Report != null,
-            s.Keys == null ? null : new { s.Keys, s.Columns, s.BaselineDelimiter, s.CandidateDelimiter },
+            s.Keys == null ? null : new { s.Keys, s.Columns, s.BaselineDelimiter, s.CandidateDelimiter, s.BaselineEncoding, s.CandidateEncoding },
             new
             {
                 uniqueInputBytes = doc.Files.Sum(f => f.Bytes),

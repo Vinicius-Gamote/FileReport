@@ -45,6 +45,7 @@ public sealed class ComparisonJob
     public JobSnapshot Capture() => new(Id, OwnerId, CreatedAtUtc, State, Revision,
         Options?.KeyColumns.ToArray(), Options?.ComparedColumns?.ToArray(),
         Options?.BaselineFormat.Delimiter ?? ',', Options?.CandidateFormat.Delimiter ?? ',',
+        Options?.BaselineFormat.Encoding ?? CsvEncoding.Utf8, Options?.CandidateFormat.Encoding ?? CsvEncoding.Utf8,
         NextAttemptNumber, MaxAttempts, InputVersion, SubmittedAtUtc, TerminalAtUtc, RetryDueAtUtc,
         FailureCode, Summary, _slots.Values.ToArray(), _attempts.ToArray(), _lastFencingToken);
 
@@ -56,7 +57,8 @@ public sealed class ComparisonJob
             State = snapshot.State,
             Revision = snapshot.Revision,
             Options = snapshot.Keys is null ? null : new ComparisonOptions(snapshot.Keys, snapshot.Columns,
-                new CsvFormat(snapshot.BaselineDelimiter), new CsvFormat(snapshot.CandidateDelimiter)),
+                new CsvFormat(snapshot.BaselineDelimiter, snapshot.BaselineEncoding),
+                new CsvFormat(snapshot.CandidateDelimiter, snapshot.CandidateEncoding)),
             NextAttemptNumber = snapshot.NextAttemptNumber,
             MaxAttempts = snapshot.MaxAttempts,
             InputVersion = snapshot.InputVersion,

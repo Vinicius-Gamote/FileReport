@@ -19,7 +19,7 @@ public sealed class ComparisonOptions
         CandidateFormat = candidateFormat ?? new CsvFormat();
     }
 
-    public const int ContractVersion = 1;
+    public const int ContractVersion = 2;
     public IReadOnlyList<string> KeyColumns { get; }
     public IReadOnlyList<string>? ComparedColumns { get; }
     public CsvFormat BaselineFormat { get; }

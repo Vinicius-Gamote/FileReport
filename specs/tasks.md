@@ -101,7 +101,7 @@ Done when: A committed submission is recoverably dispatched and never falsely ma
 
 ### T09 — Implement the streaming CSV validation pipeline
 
-- [ ] Adapt the selected parser to the exact UTF-8/BOM/header/delimiter/quote/string contract and impose bounded field/record/column handling.
+- [x] Implement the UTF-8/BOM/header/delimiter/quote/string contract plus explicit bounded streaming transcoding from Windows-1252 and UTF-16; impose bounded field/record/column handling without silent encoding fallback.
 - [ ] Count logical records and actual source bytes, preserve accurate available locations, and produce stable bounded diagnostics with completeness flags.
 - [ ] Record quoted multiline fields, escaped delimiters/quotes, LF/CRLF, invalid UTF-8, whitespace/case, empty values, literal `NULL`, reordered headers, header-only input, zero-byte input, blank records versus a final terminator, and malformed rows as unverified parser cases.
 

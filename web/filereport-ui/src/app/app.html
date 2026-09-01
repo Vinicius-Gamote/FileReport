@@ -98,7 +98,9 @@
               <span class="step">01</span>
               <div>
                 <h2>Choose your files</h2>
-                <p>UTF-8 CSV with a header. File contents stay out of browser memory.</p>
+                <p>
+                  CSV with a header. UTF-8, Windows-1252, and UTF-16 are decoded as bounded streams.
+                </p>
               </div>
             </div>
             <div class="file-grid">
@@ -176,6 +178,36 @@
                 </mat-select></mat-form-field
               >
             </div>
+            <div class="file-grid">
+              <mat-form-field appearance="outline"
+                ><mat-label>Baseline encoding</mat-label
+                ><mat-select
+                  [(ngModel)]="baselineEncoding"
+                  [disabled]="busy()"
+                  (selectionChange)="run(preview.bind(this))"
+                >
+                  @for (encoding of encodings; track encoding.value) {
+                    <mat-option [value]="encoding.value">{{ encoding.label }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              >
+              <mat-form-field appearance="outline"
+                ><mat-label>Candidate encoding</mat-label
+                ><mat-select
+                  [(ngModel)]="candidateEncoding"
+                  [disabled]="busy()"
+                  (selectionChange)="run(preview.bind(this))"
+                >
+                  @for (encoding of encodings; track encoding.value) {
+                    <mat-option [value]="encoding.value">{{ encoding.label }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              >
+            </div>
+            <p class="muted">
+              Keep UTF-8 unless the source was exported in another encoding. The selected encoding
+              is validated before submission and no silent fallback is applied.
+            </p>
             <mat-form-field appearance="outline"
               ><mat-label>Key columns</mat-label
               ><mat-select multiple [(ngModel)]="keys" [disabled]="busy() || !headers().length">
@@ -227,8 +259,13 @@
             }
             @if (job.failureCode) {
               <p class="error">
-                Processing failed: {{ job.failureCode }}. No complete comparison is published.
-                Remaining record totals may be unknown.
+                @if (job.failureCode === 'InvalidUtf8' || job.failureCode === 'InvalidEncoding') {
+                  The selected source encoding could not decode one of the CSV files. Start a new
+                  comparison and select the actual encoding, or export the source as UTF-8.
+                } @else {
+                  Processing failed: {{ job.failureCode }}. No complete comparison is published.
+                  Remaining record totals may be unknown.
+                }
               </p>
             }
             @if (report(); as result) {
