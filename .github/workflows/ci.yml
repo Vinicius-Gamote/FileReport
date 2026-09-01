@@ -76,6 +76,19 @@ jobs:
     timeout-minutes: 30
     env:
       COMPOSE_PROJECT_NAME: filereport-ci-${{ github.run_id }}-${{ github.run_attempt }}
+<<<<<<< HEAD
+=======
+      DOTNET_ENVIRONMENT: Production
+      RabbitMq__Host: 127.0.0.1
+      RabbitMq__Port: "55672"
+      RabbitMq__User: filereport
+      Jwt__Issuer: FileReport
+      Jwt__Audience: FileReport.Web
+      Email__Mode: Fake
+      Email__From: FileReport <reports@example.test>
+      Email__ReportBaseUrl: http://localhost:8080
+      Cors__Origin: http://localhost:8080
+>>>>>>> 497ce987d5f2bf25f371d88b616bde4f809445e9
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
