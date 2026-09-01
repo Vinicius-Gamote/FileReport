@@ -128,7 +128,7 @@ jobs:
             echo "ConnectionStrings__Database=Host=127.0.0.1;Port=55432;Database=filereport_tests;Username=filereport;Password=$database_secret"
             echo "RabbitMq__Password=$broker_secret"
             echo "Jwt__SigningKey=$signing_key"
-            echo "Storage_Root=$RUNNER_TEMP"
+            echo "Storage__Root=/tmp"
           } >> "$GITHUB_ENV"
 
       - name: Start PostgreSQL and RabbitMQ
