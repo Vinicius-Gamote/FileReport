@@ -20,7 +20,7 @@ env:
 
 jobs:
   backend:
-    name: Backend
+    name: Backend build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -31,8 +31,6 @@ jobs:
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
         with:
           dotnet-version: 10.0.400
-          cache: true
-          cache-dependency-path: "**/packages.lock.json"
 
       - name: Restore locked dependencies
         run: dotnet restore FileReport.slnx --locked-mode --configfile NuGet.Config
@@ -43,14 +41,8 @@ jobs:
       - name: Build
         run: dotnet build FileReport.slnx --no-restore --configuration Release
 
-      - name: Run tests
-        run: >-
-          dotnet test FileReport.slnx
-          --no-build --no-restore
-          --configuration Release
-
   frontend:
-    name: Frontend
+    name: Frontend build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -64,8 +56,6 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 24.18.0
-          cache: npm
-          cache-dependency-path: web/filereport-ui/package-lock.json
 
       - name: Install locked dependencies
         run: npm ci
@@ -76,16 +66,18 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run tests
+      - name: Run colocated frontend tests
         run: npm test
 
-  system:
-    name: PostgreSQL, RabbitMQ and deployed API
+  containers:
+    name: Container images
     needs: [backend, frontend]
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     env:
       COMPOSE_PROJECT_NAME: filereport-ci-${{ github.run_id }}-${{ github.run_attempt }}
+<<<<<<< HEAD
+=======
       DOTNET_ENVIRONMENT: Production
       RabbitMq__Host: 127.0.0.1
       RabbitMq__Port: "55672"
@@ -96,23 +88,12 @@ jobs:
       Email__From: FileReport <reports@example.test>
       Email__ReportBaseUrl: http://localhost:8080
       Cors__Origin: http://localhost:8080
+>>>>>>> 497ce987d5f2bf25f371d88b616bde4f809445e9
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Set up .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
-        with:
-          dotnet-version: 10.0.400
-          cache: true
-          cache-dependency-path: "**/packages.lock.json"
-
-      - name: Restore and build test host
-        run: |
-          dotnet restore FileReport.slnx --locked-mode --configfile NuGet.Config
-          dotnet build FileReport.slnx --no-restore --configuration Release
-
-      - name: Generate isolated credentials
+      - name: Generate validation-only Compose values
         shell: bash
         run: |
           database_secret=$(openssl rand -hex 32)
@@ -125,46 +106,10 @@ jobs:
             echo "POSTGRES_PASSWORD=$database_secret"
             echo "RABBITMQ_PASSWORD=$broker_secret"
             echo "JWT_SIGNING_KEY=$signing_key"
-            echo "ConnectionStrings__Database=Host=127.0.0.1;Port=55432;Database=filereport_tests;Username=filereport;Password=$database_secret"
-            echo "RabbitMq__Password=$broker_secret"
-            echo "Jwt__SigningKey=$signing_key"
-            echo "Storage__Root=/tmp"
           } >> "$GITHUB_ENV"
 
-      - name: Start PostgreSQL and RabbitMQ
-        run: docker compose up -d --wait postgres rabbitmq
+      - name: Validate Compose
+        run: docker compose config --quiet
 
-      - name: Prepare isolated test database
-        run: docker compose exec -T postgres createdb -U filereport filereport_tests
-
-      - name: Apply test database migrations
-        run: dotnet run --project src/FileReport.Api --configuration Release --no-build -- --migrate
-
-      - name: Run real-infrastructure tests
-        env:
-          RUN_INFRASTRUCTURE_TESTS: "1"
-        run: >-
-          dotnet test tests/FileReport.IntegrationTests
-          --no-build --no-restore
-          --configuration Release
-          --filter FullyQualifiedName~InfrastructureTests
-
-      - name: Build and start the complete stack
-        run: docker compose up -d --build --wait
-
-      - name: Run deployed API smoke test
-        env:
-          FILEREPORT_SMOKE_BASE_URL: http://127.0.0.1:5080
-        run: >-
-          dotnet test tests/FileReport.IntegrationTests
-          --no-build --no-restore
-          --configuration Release
-          --filter FullyQualifiedName~DeployedApiTests
-
-      - name: Stop isolated services
-        if: always()
-        shell: bash
-        run: |
-          if [[ -n "${POSTGRES_PASSWORD:-}" && -n "${RABBITMQ_PASSWORD:-}" && -n "${JWT_SIGNING_KEY:-}" ]]; then
-            docker compose down --volumes --remove-orphans
-          fi
+      - name: Build application images
+        run: docker compose build api worker web

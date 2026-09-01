@@ -2,8 +2,6 @@
 **/obj/
 **/node_modules/
 **/dist/
-**/.angular/
-.cache/
 .local/
 *.user
 .env

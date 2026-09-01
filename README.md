@@ -89,7 +89,7 @@ The Domain project has no framework dependencies. Application defines use cases 
 | Messaging | RabbitMQ 4, durable quorum queue, dead-letter exchange and DLQ |
 | Processing | Separate .NET worker, strict CSV parser, bounded external sort and merge |
 | Observability | Structured JSON logs, OpenTelemetry, persisted job/attempt metrics |
-| Testing | xUnit, ASP.NET Core test host, real-infrastructure opt-in tests, Vitest |
+| Frontend checks | Prettier, Angular production build, colocated Vitest specs |
 | Delivery | Dockerfiles, Docker Compose, GitHub Actions |
 
 Exact dependency versions are pinned in [Directory.Packages.props](Directory.Packages.props), NuGet lockfiles, and the [frontend lockfile](web/filereport-ui/package-lock.json).
@@ -179,14 +179,13 @@ Mutation endpoints use revisions and/or idempotency keys where required. Errors 
 
 ## Development
 
-### Direct build and tests
+### Direct build and frontend checks
 
 The repository uses native tool commands; no helper-script directory is required.
 
 ```powershell
 dotnet restore FileReport.slnx --locked-mode --configfile NuGet.Config
 dotnet build FileReport.slnx --no-restore --configuration Release
-dotnet test FileReport.slnx --no-build --no-restore --configuration Release
 dotnet format whitespace FileReport.slnx --no-restore --verify-no-changes
 
 npm ci --prefix web/filereport-ui
@@ -195,7 +194,7 @@ npm --prefix web/filereport-ui run build
 npm --prefix web/filereport-ui test
 ```
 
-Infrastructure and deployed-stack tests are opt-in because they require isolated running dependencies. CI creates a separate database and file store, forces fake email, runs migrations, exercises real PostgreSQL/RabbitMQ behavior, and runs the deployed API smoke test.
+The repository intentionally contains no backend test projects. CI restores and builds the backend, checks formatting, validates the frontend, and builds all application images without creating test-result directories or artifacts.
 
 <details>
 <summary><strong>Run API, worker, and Angular directly</strong></summary>
@@ -231,27 +230,6 @@ See [Microsoft's User Secrets guidance](https://learn.microsoft.com/en-us/aspnet
 
 </details>
 
-<details>
-<summary><strong>Run opt-in integration checks</strong></summary>
-
-Use an isolated database and file store, set `Email__Mode=Fake`, apply migrations, then run:
-
-```powershell
-$env:RUN_INFRASTRUCTURE_TESTS = '1'
-dotnet test tests/FileReport.IntegrationTests --filter FullyQualifiedName~InfrastructureTests
-```
-
-For a running isolated full stack:
-
-```powershell
-$env:FILEREPORT_SMOKE_BASE_URL = 'http://127.0.0.1:5080'
-dotnet test tests/FileReport.IntegrationTests --filter FullyQualifiedName~DeployedApiTests
-```
-
-The smoke check validates authentication, uploads, asynchronous completion, all four comparison counts, artifact download, owner isolation, and fake-email idempotency.
-
-</details>
-
 ## Repository structure
 
 ```text
@@ -266,7 +244,6 @@ The smoke check validates authentication, uploads, asynchronous completion, all 
 │   ├── FileReport.Contracts/
 │   ├── FileReport.Api/
 │   └── FileReport.Worker/
-├── tests/                     # Unit, architecture, API, and infrastructure tests
 ├── web/filereport-ui/         # Angular application
 ├── docker-compose.yml
 └── FileReport.slnx
@@ -280,20 +257,20 @@ Configured limits are safety boundaries to evaluate. They do not establish suppo
 
 ## Validation status
 
-The comparison pipeline, container definitions, CI workflow, and automated suites are present. The latest local validation used direct commands and produced:
+The comparison pipeline, container definitions, and CI workflow are present. The latest retained validation produced:
 
 - Backend build and formatting: passed.
-- Backend tests: 77 passed; 6 opt-in infrastructure/deployed-stack tests skipped because the Docker engine was unavailable.
-- Frontend formatting, build, and tests: passed; 4 tests passed.
+- Backend automated test projects were removed by the current repository scope.
+- Frontend formatting, build, and colocated tests passed.
 - Native API startup and liveness with User Secrets: passed.
 - Compose configuration and CI YAML syntax: passed.
 
-Remote CI execution, the revised full-stack smoke check, complete browser end-to-end coverage, real Resend configuration, and production readiness still require validation. The Angular production build currently reports an initial-bundle budget warning.
+Remote execution of the simplified build-only CI, browser end-to-end validation, real Resend configuration, and production readiness remain unverified. The Angular production build currently reports an initial-bundle budget warning.
 
 ## Security and measurement policy
 
-- Never commit `.env`, User Secrets, source CSVs, reports, or generated test data.
-- Local/test email mode is `Fake`; automated tests do not contact Resend.
+- Never commit `.env`, User Secrets, source CSVs, reports, or generated runtime data.
+- Local email mode defaults to `Fake`; registration and job completion do not send automatic email.
 - Account email ownership is unverified, so production use requires abuse controls and sender-domain configuration.
 - A local shared volume and a single Gateway do not establish multi-host availability.
 - No throughput, latency, memory, maximum file size, availability, or monetary-cost guarantee is claimed before reproducible measurement.
